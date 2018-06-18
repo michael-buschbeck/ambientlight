@@ -1,15 +1,18 @@
 import argparse
-import math
+import collections
 import re
+
+import os
 import signal
 import sys
 import time
 import termios
 import threading
 import tty
-import types
 
 import BaseHTTPServer
+import SimpleHTTPServer
+import json
 import urlparse
 
 
@@ -259,12 +262,17 @@ class LightController(object):
             self.pixel_offset       = pixel_offset
             self.pixel_offset_speed = pixel_offset_speed
 
-            pixel_alpha_gradient = (pixel_alpha_right - pixel_alpha_left) / (pixel_length - 1)
+            if pixel_length == 1:
+                self.pixel_alpha_colors = [
+                    (pixel_alpha_left if pixel_offset_speed > 0.0 else pixel_alpha_right,) + pixel_color]
 
-            self.pixel_alpha_colors = [
-                (pixel_alpha_left + pixel_alpha_gradient * pixel_index,) + pixel_color
-                    for pixel_index
-                    in xrange(pixel_length)]
+            else:
+                pixel_alpha_gradient = (pixel_alpha_right - pixel_alpha_left) / (pixel_length - 1)
+
+                self.pixel_alpha_colors = [
+                    (pixel_alpha_left + pixel_alpha_gradient * pixel_index,) + pixel_color
+                        for pixel_index
+                        in xrange(pixel_length)]
 
 
 
@@ -406,34 +414,45 @@ class LightController(object):
                     prev_step_time = time.time()
 
 
-    def set_light_color(self, light_color, transition_time = 1.0):
+    def set_light_color(self, light_color, transition_time = 0.0):
 
         print 'Set light color to (%d,%d,%d)' % light_color
 
-        range_length_left = (self.light.strip_size + 1) // 2
-
-        channel_weights = (0.2989, 0.5870, 0.1140)
-        old_light_color_lightness = sum(channel * channel_weight for channel, channel_weight in zip(self.light_color, channel_weights))
-        new_light_color_lightness = sum(channel * channel_weight for channel, channel_weight in zip(     light_color, channel_weights))
-
-        if new_light_color_lightness > old_light_color_lightness:
-            # fade in brighter colors from center to outside
+        if transition_time <= 0.0:
+            # dummy layer that is instantly complete
             layer = self.Layer(
-                pixel_length       = range_length_left,
-                pixel_color        = light_color,
-                pixel_alpha_left   = 0.0,
-                pixel_alpha_right  = 1.0,
-                pixel_offset       = range_length_left,
-                pixel_offset_speed = -range_length_left / float(transition_time))
-        else:
-            # fade in darker colors from outside to center
-            layer = self.Layer(
-                pixel_length       = range_length_left,
+                pixel_length       = 1,
                 pixel_color        = light_color,
                 pixel_alpha_left   = 1.0,
-                pixel_alpha_right  = 0.0,
-                pixel_offset       = -range_length_left,
-                pixel_offset_speed = range_length_left / float(transition_time))
+                pixel_alpha_right  = 1.0,
+                pixel_offset       = -1.0,
+                pixel_offset_speed = -1.0)
+
+        else:
+            range_length_left = (self.light.strip_size + 1) // 2
+
+            channel_weights = (0.2989, 0.5870, 0.1140)
+            old_light_color_lightness = sum(channel * channel_weight for channel, channel_weight in zip(self.light_color, channel_weights))
+            new_light_color_lightness = sum(channel * channel_weight for channel, channel_weight in zip(     light_color, channel_weights))
+
+            if new_light_color_lightness > old_light_color_lightness:
+                # fade in brighter colors from center to outside
+                layer = self.Layer(
+                    pixel_length       = range_length_left,
+                    pixel_color        = light_color,
+                    pixel_alpha_left   = 0.0,
+                    pixel_alpha_right  = 1.0,
+                    pixel_offset       = range_length_left,
+                    pixel_offset_speed = -range_length_left / float(transition_time))
+            else:
+                # fade in darker colors from outside to center
+                layer = self.Layer(
+                    pixel_length       = range_length_left,
+                    pixel_color        = light_color,
+                    pixel_alpha_left   = 1.0,
+                    pixel_alpha_right  = 0.0,
+                    pixel_offset       = -range_length_left,
+                    pixel_offset_speed = range_length_left / float(transition_time))
 
         self.layer_condition_access_layers.acquire()
 
@@ -451,31 +470,86 @@ class LightController(object):
 
 class ControlHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
+    def do_GET(self):
+
+        if self.path == '/light':
+            self.do_get_light()
+        else:
+            self.do_get_web(self.path)
+
+
     def do_POST(self):
 
         request_body_length = int(self.headers['Content-Length'])
         request_body = self.rfile.read(request_body_length)
         request_args = urlparse.parse_qs(request_body, keep_blank_values = True)
 
-        print "method=%s path=%s body=%s" % (self.command, self.path, request_args)
-
         if self.path == '/light':
-            self.do_light(request_args)
+            self.do_set_light(request_args)
         else:
             self.send_response(code = 404)
 
     
-    def do_light(self, request_args):
+    def do_get_light(self):
+
+        self.send_response(code = 200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+
+        self.wfile.write(
+            json.dumps(collections.OrderedDict((
+                ('r', self.server.light_controller.light_color[0]),
+                ('g', self.server.light_controller.light_color[1]),
+                ('b', self.server.light_controller.light_color[2]),
+            ))))
+        self.wfile.write('\n')
+
+
+    def do_set_light(self, request_args):
 
         light_color = (
             int(request_args['r'][0]),
             int(request_args['g'][0]),
             int(request_args['b'][0]))
 
-        transition_time = (float(request_args['time'][0]) if request_args['time'] else 1.0)
+        transition_time = (float(request_args['time'][0]) if 'time' in request_args else 0.0)
 
         self.server.light_controller.set_light_color(light_color, transition_time)
         self.send_response(code = 200)
+
+    def do_get_web(self, path):
+
+        if path == '/':
+            web_file_name = 'index.html'
+        else:
+            web_file_name = path[1:]
+
+        # TODO verify sanity of web_filename
+        if not re.match(r'^(([-\w]+\.)*[-\w]+/)*([-\w]+\.)*[-\w]+$', web_file_name):
+            self.send_response(code = 404)
+
+        else:
+            web_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'web', *web_file_name.split('/'))
+
+            try:
+                with open(web_file_path, 'r') as web_file:
+                    web_file_contents = web_file.read()
+
+                try:
+                    web_file_name_ext = os.path.splitext(web_file_name)[1]
+                    web_file_type = SimpleHTTPServer.SimpleHTTPRequestHandler.extensions_map[web_file_name_ext]
+                except:
+                    web_file_type = SimpleHTTPServer.SimpleHTTPRequestHandler.extensions_map['']
+
+                self.send_response(code = 200)
+                self.send_header('Content-Type', web_file_type)
+                self.send_header('Content-Length', len(web_file_contents))
+                self.end_headers()
+
+                self.wfile.write(web_file_contents)
+
+            except IOError:
+                self.send_response(code = 404)
 
 
 
@@ -539,7 +613,7 @@ if __name__ == '__main__':
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    print 'Ready to receive HTTP POST requests on http://%s:%d (press Ctrl+C to exit).' % (server.server_name, server.server_port)
+    print 'Ready to receive HTTP requests on http://%s:%d (press Ctrl+C to exit).' % (server.server_name, server.server_port)
 
     server.serve_forever(poll_interval = 0.5)
     server.light_controller.stop()

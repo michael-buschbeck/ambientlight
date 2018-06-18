@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="translucent-black">
+        <meta name="apple-mobile-web-app-title" content="Ambient Light">
+
+        <link rel="apple-touch-icon" href="icon.png">
+
+        <title>Ambient Light</title>
+
+        <script type="text/javascript" src="jquery-3.3.1.min.js">
+        </script>
+
+        <script type="text/javascript">
+            function set_light(light_color, transition_time)
+            {
+                $.post('light',
+                {
+                    r: light_color[0],
+                    g: light_color[1],
+                    b: light_color[2],
+                    time: transition_time
+                });
+            }
+
+            
+            var color_choices =
+            [
+                { caption: 'white', light_color: [255,160,64], transition_time: 2.0 },
+                { caption: 'warm',  light_color: [255,80,12],  transition_time: 2.0 },
+                { caption: 'off',   light_color: [0,0,0],      transition_time: 2.0 },
+            ];
+
+
+            $(function()
+            {
+                for (var color_choice_index = 0; color_choice_index < color_choices.length; ++color_choice_index)
+                {
+                    var color_choice = color_choices[color_choice_index];
+
+                    color_choice.element = $('<div class="color_button">');
+                    color_choice.element.text(color_choice.caption);
+
+                    color_choice.element.click(
+                    {
+                        light_color:     color_choice.light_color,
+                        transition_time: color_choice.transition_time
+                    },
+                    function(event) { set_light(event.data.light_color, event.data.transition_time) });
+
+                    $('.color_button_container').append(color_choice.element);
+                }
+            });
+        </script>
+
+        <style type="text/css">
+            html, body
+            {
+                margin: 0;
+                padding: 0;
+                background: #000000;
+            }
+
+            div.color_button_container
+            {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+            }
+
+            div.color_button
+            {
+                margin: 24pt 0pt;
+                border-top: 2pt solid #808080;
+                border-bottom: 2pt solid #808080;
+                background: #e0e0e0;
+                width: 100%;
+                padding: 12pt;
+                text-align: center;
+                font-family: sans-serif;
+                font-weight: bold;
+                font-size: 64pt;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="color_button_container"></div>
+    </body>
+</html>
