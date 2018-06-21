@@ -4,10 +4,14 @@
         <meta charset="UTF-8">
 
         <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="translucent-black">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black">
         <meta name="apple-mobile-web-app-title" content="Ambient Light">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
 
         <link rel="apple-touch-icon" href="icon.png">
+        <link rel="apple-touch-startup-image" href="splash-320x480.png"  media="(orientation: portrait) and (device-width: 320px) and (-webkit-device-pixel-ratio: 1)">
+        <link rel="apple-touch-startup-image" href="splash-640x960.png"  media="(orientation: portrait) and (device-width: 320px) and (-webkit-device-pixel-ratio: 2)">
+        <link rel="apple-touch-startup-image" href="splash-750x1334.png" media="(orientation: portrait) and (device-width: 375px) and (-webkit-device-pixel-ratio: 2)">
 
         <title>Ambient Light</title>
 
@@ -59,6 +63,11 @@
         <style type="text/css">
             html, body
             {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
                 margin: 0;
                 padding: 0;
                 background: #000000;
@@ -66,7 +75,7 @@
 
             div.color_button_container
             {
-                position: absolute;
+                position: fixed;
                 left: 0;
                 right: 0;
                 bottom: 0;
@@ -74,16 +83,16 @@
 
             div.color_button
             {
-                margin: 24pt 0pt;
-                border-top: 2pt solid #808080;
-                border-bottom: 2pt solid #808080;
+                margin: 8pt 0;
+                border-top: 4pt solid #808080;
+                border-bottom: 4pt solid #808080;
                 background: #e0e0e0;
                 width: 100%;
-                padding: 12pt;
+                padding: 4pt 0;
                 text-align: center;
-                font-family: sans-serif;
+                font-family: 'Avenir Next Condensed', sans-serif;
                 font-weight: bold;
-                font-size: 64pt;
+                font-size: 28pt;
             }
         </style>
     </head>
