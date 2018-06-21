@@ -27,6 +27,43 @@
                     g: light_color[1],
                     b: light_color[2],
                     time: transition_time
+                },
+                function(response_data, response_status)
+                {
+                  update_color_preview(light_color);
+                });
+            }
+
+
+            function query_color_preview()
+            {
+                $.get('light', function(response_data, response_status)
+                {
+                    var light_color =
+                    [
+                        response_data.r,
+                        response_data.g,
+                        response_data.b,
+                    ];
+
+                    update_color_preview(light_color);
+                });
+            }
+
+
+            function update_color_preview(light_color)
+            {
+                var corrected_light_color =
+                [
+                    Math.max(0, Math.min(255, Math.round(light_color[0] * (255 / 255)))),
+                    Math.max(0, Math.min(255, Math.round(light_color[1] * (255 / 160)))),
+                    Math.max(0, Math.min(255, Math.round(light_color[2] * (255 /  64)))),
+                ];
+
+                $('#color_preview').css(
+                {
+                    'transition': 'background 1.0s ease',
+                    'background': 'rgb(' + corrected_light_color.join(',') + ')'
                 });
             }
 
@@ -53,10 +90,15 @@
                         light_color:     color_choice.light_color,
                         transition_time: color_choice.transition_time
                     },
-                    function(event) { set_light(event.data.light_color, event.data.transition_time) });
+                    function(event)
+                    {
+                        set_light(event.data.light_color, event.data.transition_time);
+                    });
 
                     $('.color_button_container').append(color_choice.element);
                 }
+
+                query_color_preview();
             });
         </script>
 
@@ -97,7 +139,7 @@
         </style>
     </head>
 
-    <body>
+    <body id="color_preview">
         <div class="color_button_container"></div>
     </body>
 </html>
