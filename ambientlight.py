@@ -524,7 +524,6 @@ class ControlHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         else:
             web_file_name = path[1:]
 
-        # TODO verify sanity of web_filename
         if not re.match(r'^(([-\w]+\.)*[-\w]+/)*([-\w]+\.)*[-\w]+$', web_file_name):
             self.send_response(code = 404)
 
