@@ -125,7 +125,7 @@ class TimingLight(Light):
 
 
 
-class DebugLight(Light):
+class ConsoleLight(Light):
 
     channel_weights = (0.2989, 0.5870, 0.1140)
     interpolated_char = (u'\u0020', u'\u2591', u'\u2592', u'\u2593')
@@ -282,6 +282,8 @@ class LightController(object):
 
         self.light = light
         self.light_color = (0,0,0)
+        self.light_color_history = [self.light_color]
+        self.light_color_history_length = 16
 
         self.step_rate = step_rate
 
@@ -419,7 +421,7 @@ class LightController(object):
 
     def set_light_color(self, light_color, transition_time = 0.0):
 
-        print 'Set light color to (%d,%d,%d)' % light_color
+        if light_color == self.light_color: return
 
         if transition_time <= 0.0:
             # dummy layer that is instantly complete
@@ -462,12 +464,70 @@ class LightController(object):
         self.layers += [layer]
         self.light_color = light_color
 
+        self.light_color_history += [light_color]
+        self.light_color_history = self.light_color_history[-self.light_color_history_length:]
+
         if len(self.layers) == 1:
             self.layer_condition_wait_step.acquire()
             self.layer_condition_wait_step.notify()
             self.layer_condition_wait_step.release()
 
         self.layer_condition_access_layers.release()
+
+
+
+class LightManager(object):
+
+    def __init__(self, light_controller, cycle_light_colors, cycle_transition_time = 0.0, off_light_color = (0,0,0), off_transition_time = 0.0):
+
+        self.light_controller = light_controller
+
+        self.cycle_light_colors    = cycle_light_colors
+        self.cycle_transition_time = cycle_transition_time
+        self.off_light_color       = off_light_color
+        self.off_transition_time   = off_transition_time
+
+
+    def is_on(self):
+
+        return (self.light_controller.light_color != self.off_light_color)
+
+
+    def is_off(self):
+
+        return (self.light_controller.light_color == self.off_light_color)
+
+
+    def switch_on(self):
+
+        if self.is_off():
+            if len(self.light_controller.light_color_history) < 2:
+                on_light_color = self.cycle_light_colors[0]
+            else:
+                # last history color must be off, previous is most recent on
+                on_light_color = self.light_controller.light_color_history[-2]
+
+            self.light_controller.set_light_color(on_light_color, self.cycle_transition_time)
+
+
+    def switch_off(self):
+
+        if self.is_on():
+            self.light_controller.set_light_color(self.off_light_color, self.off_transition_time)
+
+
+    def cycle(self):
+
+        if self.is_off():
+            self.switch_on()
+        else:
+            try:
+                curr_cycle_light_color_index = self.cycle_light_colors.index(self.light_controller.light_color)
+                next_cycle_light_color = self.cycle_light_colors[(curr_cycle_light_color_index + 1) % len(self.cycle_light_colors)]
+            except:
+                next_cycle_light_color = self.cycle_light_colors[0]
+
+            self.light_controller.set_light_color(next_cycle_light_color, self.cycle_transition_time)
 
 
 
@@ -481,6 +541,18 @@ class ControlHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.do_get_web(self.path)
 
 
+    def do_PUT(self):
+
+        request_body_length = int(self.headers['Content-Length'])
+        request_body = self.rfile.read(request_body_length)
+        request_args = urlparse.parse_qs(request_body, keep_blank_values = True)
+
+        if self.path == '/light':
+            self.do_put_light(request_args)
+        else:
+            self.send_response(code = 404)
+
+
     def do_POST(self):
 
         request_body_length = int(self.headers['Content-Length'])
@@ -488,7 +560,7 @@ class ControlHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         request_args = urlparse.parse_qs(request_body, keep_blank_values = True)
 
         if self.path == '/light':
-            self.do_set_light(request_args)
+            self.do_post_light(request_args)
         else:
             self.send_response(code = 404)
 
@@ -508,7 +580,7 @@ class ControlHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.wfile.write('\n')
 
 
-    def do_set_light(self, request_args):
+    def do_put_light(self, request_args):
 
         light_color = (
             int(request_args['r'][0]),
@@ -519,6 +591,27 @@ class ControlHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         self.server.light_controller.set_light_color(light_color, transition_time)
         self.send_response(code = 200)
+
+
+    def do_post_light(self, request_args):
+
+        command = request_args['command'][0]
+
+        if command == 'on':
+            self.server.light_manager.switch_on()
+            self.send_response(code = 200)
+
+        elif command == 'off':
+            self.server.light_manager.switch_off()
+            self.send_response(code = 200)
+
+        elif command == 'cycle':
+            self.server.light_manager.cycle()
+            self.send_response(code = 200)
+
+        else:
+            self.send_response(code = 400)
+
 
     def do_get_web(self, path):
 
@@ -600,10 +693,23 @@ if __name__ == '__main__':
     server = BaseHTTPServer.HTTPServer(server_address, ControlHTTPRequestHandler)
 
     if args.light_driver == 'neopixel': light = NeopixelLight(strip_size = args.light_count, strip_pin = 18)
-    if args.light_driver == 'console':  light = DebugLight   (strip_size = args.light_count, write_prefix = '\r', write_suffix = '\n')
+    if args.light_driver == 'console':  light = ConsoleLight (strip_size = args.light_count, write_prefix = '\r', write_suffix = '\n')
     if args.light_driver == 'timing':   light = TimingLight  (strip_size = args.light_count, write_prefix = '\r', write_suffix = '\n')
 
-    server.light_controller = LightController(light, step_rate = args.step_rate)
+    light_controller = LightController(
+        light,
+        step_rate = args.step_rate)
+
+    light_manager = LightManager(
+        light_controller,
+        cycle_light_colors = [
+            (255,80,12),    # warm orange
+            (255,160,64)],  # nice natural white
+        cycle_transition_time = 2.0,
+        off_transition_time   = 2.0)
+
+    server.light_controller = light_controller
+    server.light_manager    = light_manager
     server.light_controller.start()
 
     def sigint_handler(signal, frame):

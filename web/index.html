@@ -23,16 +23,21 @@
             {
                 function set_light(light_color, transition_time)
                 {
-                    $.post('light',
+                    $.ajax(
                     {
-                        r: light_color[0],
-                        g: light_color[1],
-                        b: light_color[2],
-                        time: transition_time
-                    },
-                    function(response_data, response_status)
-                    {
-                      update_color_preview(light_color);
+                      type: 'PUT',
+                      url: 'light',
+                      data:
+                      {
+                          r: light_color[0],
+                          g: light_color[1],
+                          b: light_color[2],
+                          time: transition_time
+                      },
+                      success: function(response_data, response_status)
+                      {
+                        update_color_preview(light_color);
+                      }
                     });
                 }
 
