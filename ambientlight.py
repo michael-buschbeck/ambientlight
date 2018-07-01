@@ -10,6 +10,8 @@ import termios
 import threading
 import tty
 
+import RPi.GPIO
+
 import BaseHTTPServer
 import SimpleHTTPServer
 import json
@@ -312,6 +314,7 @@ class LightController(object):
             self.layer_condition_wait_step.release()
 
             self.layer_thread.join()
+            self.layer_thread = None
 
 
     def layer_thread_proc(self):
