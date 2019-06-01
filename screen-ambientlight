@@ -1,0 +1,9 @@
+#!/bin/bash
+
+##  To auto-start on system startup, add these lines to /etc/rc.local:
+## 
+##  su pi -c /home/pi/ambientlight/screen-ambientlight || \
+##      echo "Unable to start AmbientLight service (exit code $?)"
+
+DIR=$(dirname -- $0)
+screen -S ambientlight -m -d sudo python "$DIR/ambientlight.py" --server-address 0.0.0.0 --server-port 8000 --light-driver neopixel --light-count 57 --step-rate 120
